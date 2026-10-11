@@ -1,0 +1,15 @@
+# Rust build artifacts
+/target/
+
+# Generated pipeline images and local CLI output
+/app_cache/*
+/gallery_output/
+/cli_output.jpg
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
