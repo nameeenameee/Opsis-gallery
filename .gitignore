@@ -13,3 +13,5 @@
 *.swo
 .DS_Store
 Thumbs.db
+
+/PDF doc.md
