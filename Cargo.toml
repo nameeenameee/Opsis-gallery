@@ -9,3 +9,6 @@ rayon = "1.10"         # Xử lý đa luồng CPU cực nhanh
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"     # Ghi/đọc State dưới dạng JSON
 uuid = { version = "1.8", features = ["v4"] }      # Cấp unique ID cho ảnh copy
+
+[dev-dependencies]
+eframe = "0.29" # or latest compatible version
