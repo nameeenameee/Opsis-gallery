@@ -1,199 +1,106 @@
 # Opsis Pipeline Demo
 
-## Tổng quan
+## Overview
 
-Đây là một chương trình chỉnh sửa ảnh viết bằng Rust. Hiện tại chương trình
-chạy bằng command line (Terminal), chưa có giao diện cửa sổ hoặc giao diện web.
+Opsis is an image-editing pipeline written in Rust and currently used through
+the command line. The original image is always preserved; edits are stored in
+`EditState` and reapplied when creating a preview or exporting an image.
 
-Chương trình giữ nguyên ảnh gốc và lưu các chỉnh sửa dưới dạng một "edit
-state". Khi cần xem preview hoặc xuất ảnh, pipeline sẽ dựng lại ảnh dựa trên
-state đó.
+## Features
 
-## Hiện tại chương trình làm được gì?
+- Read JPG and PNG images.
+- Crop, rotate, and adjust exposure, contrast, brightness, saturation,
+  vibrance, and temperature.
+- Draw freehand strokes and add colored rectangular stickers.
+- Create previews with a maximum edge size.
+- Save and load edit state as JSON.
+- Export an edited copy without overwriting the original image.
+- Presets: `natural_clean`, `vivid_landscape`, `warm_sunlight`, and
+  `classic_bw`.
+- Process pixels in parallel with `rayon`.
 
-- Đọc ảnh JPG/PNG.
-- Cắt ảnh.
-- Xoay ảnh quanh tâm.
-- Chỉnh exposure, contrast, brightness, saturation, vibrance và temperature.
-- Vẽ đường tự do lên ảnh.
-- Thêm sticker hình chữ nhật màu.
-- Tạo preview nhỏ hơn để xử lý nhanh.
-- Lưu và tải lại trạng thái chỉnh sửa bằng JSON.
-- Xuất ảnh đã chỉnh sửa thành một file mới mà không thay đổi ảnh gốc.
-- Áp dụng các preset:
-  - `natural_clean`
-  - `vivid_landscape`
-  - `warm_sunlight`
-  - `classic_bw`
+## Installation and usage
 
-Phần xử lý pixel sử dụng nhiều luồng CPU thông qua thư viện `rayon`.
+Install Rust and Cargo first. From the project directory, run
+`cargo run --release -- --input <input.jpg> --output <output.jpg>`.
+You can replace the input and output paths as needed. Run
+`cargo run --release -- --help` to see all available options.
 
-## Cài đặt và chạy
+A complete command can combine multiple edits, for example:
+`cargo run --release -- --input photo.jpg --output edited.jpg --rotate 15
+--exposure 0.3 --contrast 0.2 --saturation 0.4`.
 
-Cần cài Rust và Cargo trước. Từ thư mục dự án, chạy:
+Common options:
 
-```powershell
-cargo run --release -- --input ..\<imgname>.jpg --output cli_output.jpg
-```
+- `--preview <pixels>`: resize the image before rendering.
+- `--preset <name>`: apply an available preset.
+- `--crop x,y,width,height`: crop the image.
+- `--stroke x,y:x,y`: add a red freehand stroke.
+- `--sticker x,y,width,height,r,g,b,a`: add an RGBA sticker.
+- `--session <id>`: load state from `app_cache/<id>.json`.
+- `--save-session <id>`: save state and a preview to `app_cache/`.
 
-Có thể truyền đường dẫn ảnh khác:
+## Sessions
 
-```powershell
-cargo run --release -- --input path\to\input.jpg --output path\to\result.jpg
-```
+To save a session, add `--save-session test_session` to the render command.
+Then use `--session test_session` to load the state onto an input image.
+The JSON file contains only edit settings, not the complete image.
 
-Xem toàn bộ tùy chọn:
+## Pipeline
 
-```powershell
-cargo run --release -- --help
-```
+When rendering, the pipeline performs these steps in order:
 
-## Ví dụ sử dụng
+1. Crop if configured.
+2. Rotate the image around its center.
+3. Adjust lighting and color.
+4. Draw freehand strokes.
+5. Place stickers.
+6. Export the result.
 
-### Chỉnh màu và xoay ảnh
+The processing core is in [src/engine.rs](src/engine.rs). Main modules:
 
-```powershell
-cargo run --release -- `
-  --input ..\<imgname>.jpg `
-  --output edited.jpg `
-  --rotate 15 `
-  --exposure 0.3 `
-  --contrast 0.2 `
-  --saturation 0.4
-```
-
-### Dùng preset và preview
-
-```powershell
-cargo run --release -- `
-  --input ..\<imgname>.jpg `
-  --output preview.jpg `
-  --preview 1080 `
-  --preset vivid_landscape
-```
-
-### Cắt ảnh
-
-Giá trị crop có dạng `x,y,width,height`:
-
-```powershell
-cargo run --release -- `
-  --input ..\<imgname>.jpg `
-  --output cropped.jpg `
-  --crop 100,50,1200,800
-```
-
-### Vẽ và thêm sticker
-
-```powershell
-cargo run --release -- `
-  --input ..\<imgname>.jpg `
-  --output annotated.jpg `
-  --stroke 20,20:200,150 `
-  --sticker 300,100,120,80,0,255,0,180
-```
-
-`--stroke` hiện tạo một nét màu đỏ. Sticker có dạng:
-`x,y,width,height,r,g,b,a`.
-
-## Session và lưu chỉnh sửa
-
-### Lưu một session
-
-```powershell
-cargo run --release -- `
-  --input ..\<imgname>.jpg `
-  --output session_output.jpg `
-  --preset warm_sunlight `
-  --save-session test_session
-```
-
-Lệnh trên lưu:
-
-```text
-app_cache/test_session.json
-app_cache/test_session_preview.jpg
-```
-
-File JSON chỉ chứa các thông số chỉnh sửa, không chứa toàn bộ ảnh.
-
-### Tải lại session
-
-```powershell
-cargo run --release -- `
-  --input ..\<imgname>.jpg `
-  --output reloaded.jpg `
-  --session test_session
-```
-
-Khi tải session, chương trình đọc state từ
-`app_cache/<session-id>.json` rồi áp dụng lại lên ảnh đầu vào.
-
-## Pipeline xử lý ảnh
-
-Khi render một ảnh, chương trình thực hiện các bước sau:
-
-1. Cắt ảnh nếu có crop.
-2. Xoay ảnh quanh tâm.
-3. Điều chỉnh ánh sáng và màu sắc.
-4. Vẽ các nét tự do.
-5. Đặt các sticker.
-6. Xuất ảnh kết quả.
-
-Lõi pipeline nằm trong [src/engine.rs](src/engine.rs).
-
-## Cấu trúc các file chính
-
-| File | Vai trò |
+| File | Purpose |
 | --- | --- |
-| `src/main.rs` | Chạy demo mặc định và điều phối workflow mẫu |
-| `src/cli.rs` | Đọc và xử lý tham số command line |
-| `src/engine.rs` | Crop, rotate, chỉnh màu, vẽ và render ảnh |
-| `src/lifecycle.rs` | Save, load state, save as copy và revert |
-| `src/state.rs` | Định nghĩa edit state, preset, stroke và sticker |
-| `Cargo.toml` | Khai báo package và dependencies |
-| `Intro to CS - Editing Stuffs.md` | Tài liệu chi tiết về ý tưởng và công thức xử lý ảnh |
+| [src/main.rs](src/main.rs) | Run the default demo and sample workflow |
+| [src/cli.rs](src/cli.rs) | Parse command-line arguments |
+| [src/engine.rs](src/engine.rs) | Crop, rotate, adjust color, and render images |
+| [src/lifecycle.rs](src/lifecycle.rs) | Save, load, export copies, and revert state |
+| [src/state.rs](src/state.rs) | Define edit state, presets, strokes, and stickers |
+| [Cargo.toml](Cargo.toml) | Package and dependencies |
 
-## Thư mục đầu ra
+## Generated directories
 
-- `app_cache/`: chứa JSON session và ảnh preview.
-- `gallery_output/`: chứa các ảnh bản sao được xuất từ demo.
-- `target/`: các file build do Cargo tạo ra.
+The following paths are created when running the demo or tests and should not
+be committed:
 
-Ảnh gốc không bị ghi đè trong quá trình chỉnh sửa.
+- `app_cache/`: session JSON files and previews.
+- `gallery_output/`: exported image copies.
+- `target/`: Cargo build and test output.
+- `cli_output.jpg`: the CLI's default output.
 
-## Kiểm thử
+These paths are listed in `.gitignore`. They can be safely removed and
+regenerated when needed.
 
-Chạy test bằng:
+## Testing
 
-```powershell
-cargo test
-```
+Run `cargo test` to test cropping, rendering, alpha blending, freehand
+drawing, rotation, stickers, and edit-state serialization.
 
-Các test hiện tại kiểm tra crop, render trung tính, alpha blending, vẽ đường,
-xoay ảnh, sticker và serialize edit state. Trạng thái kiểm thử hiện tại:
+## Current limitations
 
-```text
-7 passed, 0 failed
-```
+- No graphical, mobile, or web interface.
+- No real AI daemon; the channel currently simulates sending a file to an AI
+  indexer.
+- No real database; state is stored in JSON files.
+- No multi-step undo/redo, upload, or image-library management.
+- Revert removes the edit-state JSON file but keeps previews and exported
+  images.
 
-## Những phần chưa có
-
-- Chưa có giao diện đồ họa.
-- Chưa có ứng dụng mobile hoặc web.
-- Chưa có AI daemon thật sự; channel hiện chỉ mô phỏng việc gửi file cho
-  AI indexer.
-- Chưa có cơ sở dữ liệu thật; state hiện được lưu bằng file JSON.
-- Chưa có undo/redo nhiều bước.
-- Chưa có upload hoặc quản lý thư viện ảnh.
-- Revert hiện xóa file JSON edit state; các preview và ảnh bản sao đã xuất
-  vẫn còn trên đĩa.
-
-## Công nghệ sử dụng
+## Technologies
 
 - Rust 2021
-- [`image`](https://crates.io/crates/image): đọc, xử lý và ghi ảnh
-- [`rayon`](https://crates.io/crates/rayon): xử lý song song
-- [`serde`](https://crates.io/crates/serde) và
-  [`serde_json`](https://crates.io/crates/serde_json): lưu edit state
-- [`uuid`](https://crates.io/crates/uuid): tạo ID cho ảnh bản sao
+- [`image`](https://crates.io/crates/image): read, process, and write images
+- [`rayon`](https://crates.io/crates/rayon): parallel processing
+- [`serde`](https://crates.io/crates/serde) and
+  [`serde_json`](https://crates.io/crates/serde_json): store edit state
+- [`uuid`](https://crates.io/crates/uuid): generate IDs for image copies

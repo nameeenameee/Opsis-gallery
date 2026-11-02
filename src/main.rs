@@ -25,29 +25,29 @@ fn run_demo() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(cache_dir)?;
     fs::create_dir_all(gallery_dir)?;
 
-    println!("=== OPSIS GALLERY: TEST VỚI ẢNH THẬT ===");
+    println!("=== OPSIS GALLERY: REAL IMAGE TEST ===");
 
-    // 1. Nạp ảnh từ tham số dòng lệnh hoặc dùng ảnh demo có sẵn
+    // 1. Load an image from the command line or use an available demo image.
     let (original_img, input_file) = load_input_image()?;
-    println!("\n[1] Đang đọc file '{}'...", input_file);
+    println!("\n[1] Reading file '{}'...", input_file);
     println!(
-        "    Độ phân giải ảnh gốc: {} x {} px",
+        "    Original image resolution: {} x {} px",
         original_img.width(),
         original_img.height()
     );
 
-    // 2. Thiết lập các thông số chỉnh sửa (chỉnh rõ để dễ thấy khác biệt)
+    // 2. Configure edit settings with visible differences.
     let mut edit_state = EditState::default();
     edit_state.image_id = String::from("real_photo_test");
-    //edit_state.exposure = 0.6; // Tăng sáng (+0.6 EV)
-    //edit_state.contrast = 0.3; // Tăng tương phản
-    //edit_state.saturation = 0.5; // Tăng độ rực màu
-    //edit_state.temperature = 0.4; // Kéo sang tông ấm (ngả vàng nắng)
-    //edit_state.vibrance = 0.3; // Tăng rực màu thông minh
+    //edit_state.exposure = 0.6; // Increase brightness (+0.6 EV).
+    //edit_state.contrast = 0.3; // Increase contrast.
+    //edit_state.saturation = 0.5; // Increase color saturation.
+    //edit_state.temperature = 0.4; // Shift toward a warm, sunny tone.
+    //edit_state.vibrance = 0.3; // Increase intelligent vibrance.
     edit_state.crop = Some(center_crop(&original_img));
     edit_state.rotation_degrees = 45.0;
 
-    // 3. Chạy toàn bộ các stage của pipeline trên một bản preview
+    // 3. Run every pipeline stage on a preview.
     let preview = PipelineEngine::create_preview_buffer(&original_img, 1080);
     let start = Instant::now();
     let rendered_preview = run_feature_pipeline(&preview, &edit_state);
@@ -56,19 +56,16 @@ fn run_demo() -> Result<(), Box<dyn std::error::Error>> {
     image::DynamicImage::ImageRgba8(rendered_preview)
         .into_rgb8()
         .save(&pipeline_preview_path)?;
+    println!("[2] Full preview pipeline completed in: {:.2?}", duration);
     println!(
-        "[2] Toàn bộ pipeline preview hoàn tất trong: {:.2?}",
-        duration
-    );
-    println!(
-        "    Pipeline preview đã lưu ở: {}",
+        "    Pipeline preview saved to: {}",
         pipeline_preview_path.display()
     );
 
-    // 4. Test ED-03: Lưu JSON State và ảnh preview vào app_cache
+    // 4. Test ED-03: Save JSON state and a preview to app_cache.
     ImageLifecycleManager::handle_save(cache_dir, &original_img, &edit_state)?;
 
-    // 5. Test ED-04: Xuất ảnh đã chỉnh sửa full-res ra thư mục gallery_output
+    // 5. Test ED-04: Export the full-resolution edit to gallery_output.
     let (ai_tx, ai_rx) = channel::<String>();
     let exported_path = ImageLifecycleManager::handle_save_as_copy(
         gallery_dir,
@@ -78,12 +75,12 @@ fn run_demo() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     if let Ok(msg) = ai_rx.recv() {
-        println!("    [Queue Event] Đã bắn file sang AI daemon: {}", msg);
+        println!("    [Queue Event] Sent file to AI daemon: {}", msg);
     }
 
-    println!("\n=== HOÀN TẤT ===");
-    println!("-> Ảnh preview đã lưu ở: app_cache/real_photo_test_preview.jpg");
-    println!("-> Ảnh full-res đã lưu ở: {:?}", exported_path);
+    println!("\n=== COMPLETE ===");
+    println!("-> Preview saved to: app_cache/real_photo_test_preview.jpg");
+    println!("-> Full-resolution image saved to: {:?}", exported_path);
 
     ImageLifecycleManager::handle_revert(cache_dir, &edit_state.image_id)?;
     Ok(())
@@ -117,7 +114,7 @@ fn load_input_image() -> Result<(image::RgbaImage, String), Box<dyn std::error::
     if let Some(path) = requested_path {
         let image = image::open(&path).map_err(|error| {
             format!(
-                "Không thể đọc ảnh '{}'. Kiểm tra đường dẫn hoặc truyền file khác sau `cargo run --release --`: {}",
+                "Could not read image '{}'. Check the path or pass another file after `cargo run --release --`: {}",
                 path, error
             )
         })?;
@@ -130,7 +127,7 @@ fn load_input_image() -> Result<(image::RgbaImage, String), Box<dyn std::error::
         }
     }
 
-    println!("    Không tìm thấy ảnh đầu vào, tạo bảng màu demo để kiểm tra pipeline.");
+    println!("    No input image found; creating a demo color chart to test the pipeline.");
     let mut image = image::RgbaImage::new(1920, 1080);
     for (x, y, pixel) in image.enumerate_pixels_mut() {
         let column = x / 480;
