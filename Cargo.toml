@@ -4,11 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-image = "0.25"         # Đọc, ghi và resize file ảnh
-rayon = "1.10"         # Xử lý đa luồng CPU cực nhanh
+rayon = "1.10"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"     # Ghi/đọc State dưới dạng JSON
-uuid = { version = "1.8", features = ["v4"] }      # Cấp unique ID cho ảnh copy
+serde_json = "1.0"
+image = { version = "0.25", features = ["jpeg", "png"] }
+uuid = { version = "1.11", features = ["v4"] }
+eframe = "0.29"
+egui = "0.29"
 
-[dev-dependencies]
-eframe = "0.29" # or latest compatible version
+# Optional Tauri dependency for IPC bridge
+tauri = { version = "2.0", optional = true }
+
+[features]
+default = []
+tauri-ipc = ["dep:tauri"]
