@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub struct CropArea {
     pub x: u32,
     pub y: u32,
@@ -8,14 +8,37 @@ pub struct CropArea {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+pub struct NormalizedCrop {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl From<CropArea> for NormalizedCrop {
+    fn from(c: CropArea) -> Self {
+        Self {
+            x: c.x as f32,
+            y: c.y as f32,
+            width: c.width as f32,
+            height: c.height as f32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FreehandStroke {
     pub points: Vec<(i32, i32)>,
     pub color: [u8; 4],
     pub thickness: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+pub type LineStroke = FreehandStroke;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Sticker {
     pub x: i32,
     pub y: i32,
@@ -24,73 +47,95 @@ pub struct Sticker {
     pub color: [u8; 4],
 }
 
-/// Trạng thái chỉnh sửa lưu vào DB hoặc file JSON (chỉ nặng vài chục bytes)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EditState {
-    pub image_id: String,
-    pub crop: Option<CropArea>,
-    #[serde(default)]
-    pub rotation_degrees: f32,
-    pub exposure: f32, // -2.0 đến +2.0 (EV stops)
-    pub contrast: f32, // -1.0 đến +1.0
-    #[serde(default)]
-    pub brightness: f32, // -1.0 đến +1.0
-    pub saturation: f32, // -1.0 đến +1.0
-    #[serde(default)]
-    pub vibrance: f32, // -1.0 đến +1.0
-    pub temperature: f32, // -1.0 (Lạnh/Xanh) đến +1.0 (Ấm/Vàng)
-    #[serde(default)]
-    pub strokes: Vec<FreehandStroke>,
-    #[serde(default)]
-    pub stickers: Vec<Sticker>,
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum Preset {
-    NaturalClean,
-    VividLandscape,
-    WarmSunlight,
-    ClassicBw,
+    #[default]
+    None,
+    Sepia,
+    Vintage,
+    Monochrome,
 }
 
 impl Preset {
-    pub fn parse(name: &str) -> Option<Self> {
-        match name {
-            "natural_clean" => Some(Self::NaturalClean),
-            "vivid_landscape" => Some(Self::VividLandscape),
-            "warm_sunlight" => Some(Self::WarmSunlight),
-            "classic_bw" => Some(Self::ClassicBw),
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "none" => Some(Self::None),
+            "sepia" => Some(Self::Sepia),
+            "vintage" => Some(Self::Vintage),
+            "monochrome" | "mono" | "bw" => Some(Self::Monochrome),
             _ => None,
         }
     }
 
-    pub fn apply(self, state: &mut EditState) {
-        let values = match self {
-            Self::NaturalClean => (0.1, 0.1, 0.05, 0.1, 0.0),
-            Self::VividLandscape => (0.2, 0.15, 0.25, 0.35, 0.0),
-            Self::WarmSunlight => (0.2, -0.05, -0.05, 0.15, 0.7),
-            Self::ClassicBw => (0.0, 0.25, 0.0, -1.0, 0.0),
-        };
-        state.exposure = values.0;
-        state.contrast = values.1;
-        state.brightness = values.2;
-        state.saturation = values.3;
-        state.temperature = values.4;
+    pub fn apply(&self, state: &mut EditState) {
+        state.preset = *self;
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EditState {
+    #[serde(default)]
+    pub image_id: String,
+
+    #[serde(default)]
+    pub crop: Option<CropArea>,
+
+    #[serde(default)]
+    pub exposure: f32,
+
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+
+    #[serde(default)]
+    pub brightness: f32,
+
+    #[serde(default = "default_contrast")]
+    pub contrast: f32,
+
+    #[serde(default = "default_saturation")]
+    pub saturation: f32,
+
+    #[serde(default)]
+    pub vibrance: f32,
+
+    #[serde(default)]
+    pub rotation_degrees: f32,
+
+    #[serde(default)]
+    pub preset: Preset,
+
+    #[serde(default)]
+    pub strokes: Vec<FreehandStroke>,
+
+    #[serde(default)]
+    pub stickers: Vec<Sticker>,
+}
+
+fn default_temperature() -> f32 {
+    6500.0
+}
+
+fn default_contrast() -> f32 {
+    1.0
+}
+
+fn default_saturation() -> f32 {
+    1.0
 }
 
 impl Default for EditState {
     fn default() -> Self {
         Self {
-            image_id: String::from("default_img"),
+            image_id: String::new(),
             crop: None,
-            rotation_degrees: 0.0,
             exposure: 0.0,
-            contrast: 0.0,
+            temperature: 6500.0,
             brightness: 0.0,
-            saturation: 0.0,
+            contrast: 1.0,
+            saturation: 1.0,
             vibrance: 0.0,
-            temperature: 0.0,
+            rotation_degrees: 0.0,
+            preset: Preset::None,
             strokes: Vec::new(),
             stickers: Vec::new(),
         }
