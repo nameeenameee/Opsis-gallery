@@ -4,6 +4,7 @@ pub mod engine;
 pub mod lifecycle;
 pub mod session;
 pub mod state;
+pub mod sticker_extractor;
 
 #[cfg(test)]
 mod tests {
@@ -70,6 +71,25 @@ mod tests {
         let rendered = PipelineEngine::render(&img, &state);
         assert_eq!(rendered.width(), 50);
         assert_eq!(rendered.height(), 100);
+    }
+
+    #[test]
+    fn test_extract_sticker_from_seed() {
+        let image = ImageBuffer::from_fn(20, 20, |x, _| {
+            if x < 10 {
+                Rgba([255, 0, 0, 255])
+            } else {
+                Rgba([0, 0, 255, 255])
+            }
+        });
+
+        let extracted =
+            super::sticker_extractor::extract_sticker_from_seed(&image, 0.25, 0.5, 40, 70)
+                .expect("seed should identify a region");
+
+        assert!(extracted.bounds_norm.2 > 0.0);
+        assert!(extracted.bounds_norm.3 > 0.0);
+        assert!((8..=10).contains(&extracted.image.width()));
     }
 
     #[test]

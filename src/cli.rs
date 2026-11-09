@@ -206,6 +206,9 @@ fn parse_sticker(value: &str) -> Result<Sticker, String> {
             width: *width as u32,
             height: *height as u32,
             color: [*r as u8, *g as u8, *b as u8, *a as u8],
+            image: None,
+            image_width: 0,
+            image_height: 0,
         }),
         _ => Err(format!(
             "sticker must be x,y,width,height,r,g,b,a with positive dimensions, got '{value}'"

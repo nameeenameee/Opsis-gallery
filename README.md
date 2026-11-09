@@ -12,6 +12,7 @@ the command line. The original image is always preserved; edits are stored in
 - Crop, rotate, and adjust exposure, contrast, brightness, saturation,
   vibrance, and temperature.
 - Draw freehand strokes and add colored rectangular stickers.
+- Extract a sticker from a clicked image region in the live editor canvas.
 - Create previews with a maximum edge size.
 - Save and load edit state as JSON.
 - Export an edited copy without overwriting the original image.

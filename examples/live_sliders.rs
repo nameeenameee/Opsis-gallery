@@ -3,7 +3,8 @@ use image::{ImageBuffer, Rgba, RgbaImage};
 use std::time::{Duration, Instant};
 
 use opsis_pipeline_demo::engine::PipelineEngine;
-use opsis_pipeline_demo::state::EditState;
+use opsis_pipeline_demo::state::{EditState, Sticker};
+use opsis_pipeline_demo::sticker_extractor::extract_sticker_from_seed;
 
 struct LiveBenchApp {
     proxy_source: RgbaImage,
@@ -12,6 +13,7 @@ struct LiveBenchApp {
     last_render_time: Duration,
     needs_recompute: bool,
     temperature_control: f32,
+    extraction_status: Option<String>,
 }
 
 impl LiveBenchApp {
@@ -40,6 +42,7 @@ impl LiveBenchApp {
             last_render_time: Duration::ZERO,
             needs_recompute: true,
             temperature_control: 0.0,
+            extraction_status: None,
         }
     }
 }
@@ -125,7 +128,15 @@ impl eframe::App for LiveBenchApp {
                 if ui.button("Revert (ED-05)").clicked() {
                     self.state = EditState::default();
                     self.temperature_control = 0.0;
+                    self.extraction_status = None;
                     changed = true;
+                }
+
+                ui.separator();
+                ui.label("Sticker extractor");
+                ui.label("Click a region in the preview to extract it as a sticker.");
+                if let Some(status) = &self.extraction_status {
+                    ui.label(status);
                 }
 
                 if changed {
@@ -158,7 +169,47 @@ impl eframe::App for LiveBenchApp {
         // Main viewport displaying the rendered image
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(tex) = &self.texture {
-                ui.add(egui::Image::new(tex).shrink_to_fit());
+                let response = ui.add(
+                    egui::Image::new(tex)
+                        .shrink_to_fit()
+                        .sense(egui::Sense::click()),
+                );
+                if response.clicked() {
+                    if let Some(pointer) = response.interact_pointer_pos() {
+                        let u = ((pointer.x - response.rect.left()) / response.rect.width())
+                            .clamp(0.0, 1.0);
+                        let v = ((pointer.y - response.rect.top()) / response.rect.height())
+                            .clamp(0.0, 1.0);
+                        match extract_sticker_from_seed(&self.proxy_source, u, v, 40, 70) {
+                            Some(extracted) => {
+                                let (source_width, source_height) = self.proxy_source.dimensions();
+                                self.state.stickers.push(Sticker {
+                                    x: (extracted.bounds_norm.0 * source_width as f32).round()
+                                        as i32,
+                                    y: (extracted.bounds_norm.1 * source_height as f32).round()
+                                        as i32,
+                                    width: (extracted.bounds_norm.2 * source_width as f32)
+                                        .round()
+                                        .max(1.0) as u32,
+                                    height: (extracted.bounds_norm.3 * source_height as f32)
+                                        .round()
+                                        .max(1.0)
+                                        as u32,
+                                    color: [0, 0, 0, 0],
+                                    image_width: extracted.image.width(),
+                                    image_height: extracted.image.height(),
+                                    image: Some(extracted.image.into_raw()),
+                                });
+                                self.extraction_status = Some("Sticker extracted.".to_string());
+                                self.needs_recompute = true;
+                            }
+                            None => {
+                                self.extraction_status =
+                                    Some("No distinct region found at that point.".to_string());
+                            }
+                        }
+                    }
+                }
             }
         });
     }

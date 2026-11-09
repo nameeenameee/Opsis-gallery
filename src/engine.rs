@@ -321,13 +321,32 @@ impl PipelineEngine {
 
     fn draw_sticker(img: &mut RgbaImage, sticker: &Sticker) {
         let (w, h) = img.dimensions();
-        let sticker_color = Rgba(sticker.color);
+        let extracted = sticker
+            .image
+            .as_ref()
+            .filter(|bytes| {
+                sticker.image_width > 0
+                    && sticker.image_height > 0
+                    && bytes.len() == (sticker.image_width * sticker.image_height * 4) as usize
+            })
+            .and_then(|bytes| {
+                RgbaImage::from_raw(sticker.image_width, sticker.image_height, bytes.clone())
+            });
 
         for dy in 0..sticker.height as i32 {
             for dx in 0..sticker.width as i32 {
                 let px = sticker.x + dx;
                 let py = sticker.y + dy;
                 if px >= 0 && px < w as i32 && py >= 0 && py < h as i32 {
+                    let sticker_color = if let Some(source) = &extracted {
+                        let sx = (dx as u32 * source.width() / sticker.width.max(1))
+                            .min(source.width() - 1);
+                        let sy = (dy as u32 * source.height() / sticker.height.max(1))
+                            .min(source.height() - 1);
+                        *source.get_pixel(sx, sy)
+                    } else {
+                        Rgba(sticker.color)
+                    };
                     let dst = img.get_pixel_mut(px as u32, py as u32);
                     *dst = Self::blend_porter_duff(*dst, sticker_color);
                 }

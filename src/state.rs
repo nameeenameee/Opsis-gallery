@@ -45,6 +45,12 @@ pub struct Sticker {
     pub width: u32,
     pub height: u32,
     pub color: [u8; 4],
+    #[serde(default)]
+    pub image: Option<Vec<u8>>,
+    #[serde(default)]
+    pub image_width: u32,
+    #[serde(default)]
+    pub image_height: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
