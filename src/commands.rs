@@ -3,7 +3,11 @@ pub mod tauri_bindings {
     use crate::session::EditorSession;
     use crate::state::EditState;
     use crate::sticker_extractor::extract_sticker_from_seed;
+    use arboard::{Clipboard, ImageData};
+    use image::{ImageBuffer, Rgba};
     use serde::Serialize;
+    use std::borrow::Cow;
+    use std::fs;
     use std::sync::Mutex;
     use tauri::State;
 
@@ -71,6 +75,48 @@ pub mod tauri_bindings {
             image_height: extracted.image.height(),
             image: extracted.image.into_raw(),
         })
+    }
+
+    #[tauri::command]
+    pub fn save_sticker(image: Vec<u8>, width: u32, height: u32) -> Result<String, String> {
+        let expected_len = width
+            .checked_mul(height)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or("Sticker dimensions are too large")? as usize;
+        if image.len() != expected_len || width == 0 || height == 0 {
+            return Err("Invalid sticker image data".to_string());
+        }
+
+        fs::create_dir_all("./stickers").map_err(|error| error.to_string())?;
+        let path = format!("./stickers/sticker-{}.png", uuid::Uuid::new_v4());
+        let buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, image)
+            .ok_or("Invalid sticker image data")?;
+        buffer.save(&path).map_err(|error| error.to_string())?;
+        Ok(path)
+    }
+
+    #[tauri::command]
+    pub fn copy_sticker_to_clipboard(
+        image: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
+        let expected_len = width
+            .checked_mul(height)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or("Sticker dimensions are too large")? as usize;
+        if image.len() != expected_len || width == 0 || height == 0 {
+            return Err("Invalid sticker image data".to_string());
+        }
+
+        let mut clipboard = Clipboard::new().map_err(|error| error.to_string())?;
+        clipboard
+            .set_image(ImageData {
+                width: width as usize,
+                height: height as usize,
+                bytes: Cow::Owned(image),
+            })
+            .map_err(|error| error.to_string())
     }
 
     #[tauri::command]

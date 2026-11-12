@@ -4,11 +4,11 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 pub struct ExtractedSticker {
-    pub bounds_norm: (f32, f32, f32, f32), // (x, y, w, h) normalized
+    pub bounds_norm: (f32, f32, f32, f32), // (x, y, w, h)
     pub image: RgbaImage,
 }
 
-/// Extracts a sticker around a normalized coordinate (u, v) using gradient-bounded region growing.
+/// Extracts a sticker around normalized (seed_u, seed_v) via gradient-bounded region growing.
 pub fn extract_sticker_from_seed(
     proxy: &RgbaImage,
     seed_u: f32,
@@ -23,7 +23,6 @@ pub fn extract_sticker_from_seed(
     let seed_x = (seed_u * width as f32).clamp(0.0, (width - 1) as f32) as u32;
     let seed_y = (seed_v * height as f32).clamp(0.0, (height - 1) as f32) as u32;
 
-    // 1. Convert to grayscale and compute Sobel gradient magnitudes for edge boundaries
     let gray_img = image::imageops::colorops::grayscale(proxy);
     let gradients = sobel_gradient_map(&gray_img, |p| {
         let val = p[0] as f32;
@@ -43,7 +42,6 @@ pub fn extract_sticker_from_seed(
     let mut min_y = seed_y;
     let mut max_y = seed_y;
 
-    // 2. Breadth-First Region Growing bounded by color similarity and Sobel edge barrier
     while let Some((cx, cy)) = queue.pop_front() {
         mask.put_pixel(cx, cy, Luma([255]));
 
@@ -68,16 +66,12 @@ pub fn extract_sticker_from_seed(
                     let grad = gradients.get_pixel(nx, ny)[0];
                     let pix = proxy.get_pixel(nx, ny);
 
-                    // Color Euclidean distance check
                     let dr = (pix[0] as i32 - seed_pixel[0] as i32).abs() as u32;
                     let dg = (pix[1] as i32 - seed_pixel[1] as i32).abs() as u32;
                     let db = (pix[2] as i32 - seed_pixel[2] as i32).abs() as u32;
                     let color_dist = (dr * dr + dg * dg + db * db) / 3;
 
-                    // Expand if edge is soft and color is within the similarity manifold
-                    if grad < edge_stop_threshold
-                        && color_dist < (color_tolerance * color_tolerance)
-                    {
+                    if grad < edge_stop_threshold && color_dist < (color_tolerance * color_tolerance) {
                         queue.push_back((nx, ny));
                     }
                 }
@@ -89,7 +83,6 @@ pub fn extract_sticker_from_seed(
         return None;
     }
 
-    // 3. Crop tight bounding box and apply alpha-mask feathering
     let crop_w = max_x - min_x + 1;
     let crop_h = max_y - min_y + 1;
     let mut sticker_img = RgbaImage::new(crop_w, crop_h);
