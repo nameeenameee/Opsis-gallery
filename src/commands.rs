@@ -2,7 +2,6 @@
 pub mod tauri_bindings {
     use crate::session::EditorSession;
     use crate::state::EditState;
-    use crate::sticker_extractor::extract_sticker_from_seed;
     use arboard::{Clipboard, ImageData};
     use image::{ImageBuffer, Rgba};
     use serde::Serialize;
@@ -59,7 +58,8 @@ pub mod tauri_bindings {
     ) -> Result<ExtractedStickerResponse, String> {
         let lock = state.editor.lock().map_err(|e| e.to_string())?;
         let session = lock.as_ref().ok_or("No active editor session found")?;
-        let extracted = extract_sticker_from_seed(&session.proxy_source, seed_u, seed_v, 40, 70)
+        let extracted = session
+            .extract_sticker(seed_u, seed_v)
             .ok_or("No distinct region found at that point")?;
         let (source_width, source_height) = session.proxy_source.dimensions();
         Ok(ExtractedStickerResponse {

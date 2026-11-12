@@ -6,10 +6,13 @@ use uuid::Uuid;
 
 use opsis_pipeline_demo::engine::PipelineEngine;
 use opsis_pipeline_demo::state::EditState;
-use opsis_pipeline_demo::sticker_extractor::{extract_sticker_from_seed, ExtractedSticker};
+use opsis_pipeline_demo::sticker_extractor::{
+    extract_fallback_region_grow, ExtractedSticker, YoloDetectionCache,
+};
 
 use arboard::{Clipboard, ImageData};
 use std::borrow::Cow;
+use std::sync::OnceLock;
 
 struct ActiveOverlay {
     bounds_norm: (f32, f32, f32, f32),
@@ -18,6 +21,7 @@ struct ActiveOverlay {
 
 struct LiveBenchApp {
     proxy_source: RgbaImage,
+    yolo_cache: OnceLock<Option<YoloDetectionCache>>,
     state: EditState,
     texture: Option<egui::TextureHandle>,
     last_render_time: Duration,
@@ -51,6 +55,7 @@ impl LiveBenchApp {
 
         Self {
             proxy_source,
+            yolo_cache: OnceLock::new(),
             state: EditState::default(),
             texture: None,
             last_render_time: Duration::ZERO,
@@ -147,7 +152,9 @@ impl eframe::App for LiveBenchApp {
                         .changed();
 
                     changed |= ui
-                        .add(egui::Slider::new(&mut self.state.contrast, 0.0..=2.0).text("Contrast"))
+                        .add(
+                            egui::Slider::new(&mut self.state.contrast, 0.0..=2.0).text("Contrast"),
+                        )
                         .changed();
 
                     changed |= ui
@@ -159,7 +166,8 @@ impl eframe::App for LiveBenchApp {
 
                     changed |= ui
                         .add(
-                            egui::Slider::new(&mut self.state.vibrance, -1.0..=1.0).text("Vibrance"),
+                            egui::Slider::new(&mut self.state.vibrance, -1.0..=1.0)
+                                .text("Vibrance"),
                         )
                         .changed();
 
@@ -226,41 +234,44 @@ impl eframe::App for LiveBenchApp {
                         });
 
                     if let Some(sticker) = &self.extracted_sticker {
-    if ui.button("Save PNG to ./stickers").clicked() {
-        if fs::create_dir_all("./stickers").is_ok() {
-            let path = format!("./stickers/sticker-{}.png", Uuid::new_v4());
-            match sticker.image.save(&path) {
-                Ok(_) => {
-                    self.extraction_status = Some(format!("Saved: {}", path));
-                }
-                Err(e) => {
-                    self.extraction_status = Some(format!("Save failed: {}", e));
-                }
-            }
-        }
-    }
+                        if ui.button("Save PNG to ./stickers").clicked() {
+                            if fs::create_dir_all("./stickers").is_ok() {
+                                let path = format!("./stickers/sticker-{}.png", Uuid::new_v4());
+                                match sticker.image.save(&path) {
+                                    Ok(_) => {
+                                        self.extraction_status = Some(format!("Saved: {}", path));
+                                    }
+                                    Err(e) => {
+                                        self.extraction_status =
+                                            Some(format!("Save failed: {}", e));
+                                    }
+                                }
+                            }
+                        }
 
-    if ui.button("Copy image to Windows clipboard").clicked() {
-        let width = sticker.image.width() as usize;
-        let height = sticker.image.height() as usize;
-        let raw_rgba = sticker.image.as_raw();
+                        if ui.button("Copy image to Windows clipboard").clicked() {
+                            let width = sticker.image.width() as usize;
+                            let height = sticker.image.height() as usize;
+                            let raw_rgba = sticker.image.as_raw();
 
-        match Clipboard::new().and_then(|mut cb| {
-            cb.set_image(ImageData {
-                width,
-                height,
-                bytes: Cow::Borrowed(raw_rgba),
-            })
-        }) {
-            Ok(_) => {
-                self.extraction_status = Some("Copied sticker to clipboard.".to_string());
-            }
-            Err(e) => {
-                self.extraction_status = Some(format!("Clipboard copy failed: {}", e));
-            }
-        }
-    }
-}
+                            match Clipboard::new().and_then(|mut cb| {
+                                cb.set_image(ImageData {
+                                    width,
+                                    height,
+                                    bytes: Cow::Borrowed(raw_rgba),
+                                })
+                            }) {
+                                Ok(_) => {
+                                    self.extraction_status =
+                                        Some("Copied sticker to clipboard.".to_string());
+                                }
+                                Err(e) => {
+                                    self.extraction_status =
+                                        Some(format!("Clipboard copy failed: {}", e));
+                                }
+                            }
+                        }
+                    }
 
                     if let Some(status) = &self.extraction_status {
                         ui.label(status);
@@ -315,7 +326,15 @@ impl eframe::App for LiveBenchApp {
                         let v = ((pointer.y - response.rect.top()) / response.rect.height())
                             .clamp(0.0, 1.0);
 
-                        match extract_sticker_from_seed(&self.proxy_source, u, v, 40, 70) {
+                        let cache = self
+                            .yolo_cache
+                            .get_or_init(|| YoloDetectionCache::build(&self.proxy_source));
+                        let extracted_opt = match cache {
+                            Some(yolo) => yolo.extract_at(&self.proxy_source, u, v),
+                            None => extract_fallback_region_grow(&self.proxy_source, u, v, 40, 70),
+                        };
+
+                        match extracted_opt {
                             Some(extracted) => {
                                 // 1. Update persistent left preview box texture
                                 let prev_size = [
